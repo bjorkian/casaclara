@@ -13,6 +13,9 @@ App web de organização da casa para pessoas com **PHDA (TDAH)** — desenhada 
 | **Tarefas** | Lista global com zonas, duração, filtros (hoje / ≤15 min / concluídas) |
 | **Modo Foco** | Pomodoro 15/25/45 min ligado a uma tarefa, com alerta sonoro — "podes parar sem culpa" |
 | **Desapego** | Decisões binárias FICA ✓ / DÚVIDA 📦 / SAI ⇢, com a regra da caixa de 90 dias |
+| **Dias Dark** | Modo cheer up: respiração guiada 4-4-6, cuidados mínimos, modo sobrevivência e contacto de apoio |
+| **Modo escuro** | Toggle no sidebar, persistido e alinhado com a preferência do sistema |
+| **Notificações** | Lembretes gentis de manhã/noite configuráveis (com a app aberta no browser) |
 
 ## 🧠 Princípios PHDA
 

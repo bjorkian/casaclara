@@ -46,6 +46,11 @@ function defaultState() {
     oneThing: '',
     declutter: { keep: 0, go: 0, box: 0, log: [] },
     streak: { last: null, days: 0 },
+    notifMorning: '08:30',
+    notifEvening: '21:00',
+    careDone: {},
+    survivalDays: {},
+    supportNumber: '',
   };
 }
 
@@ -133,6 +138,18 @@ function renderDashboard() {
     h < 6 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 19 ? 'Boa tarde' : 'Boa noite';
   document.getElementById('dashDate').textContent =
     new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Banner modo sobrevivência
+  const zoneCard = document.getElementById('zoneTodayCard');
+  document.getElementById('survivalBanner')?.remove();
+  if (state.survivalDays && state.survivalDays[todayKey()]) {
+    zoneCard.insertAdjacentHTML('beforebegin', `
+      <div class="survival-banner" id="survivalBanner">
+        <strong>🌱 Modo sobrevivência ativo</strong>
+        <p>Hoje conta só <strong>1 coisa de 2 minutos</strong>. Escolhe a mais pequena das vitórias rápidas e já está. O resto é bónus — e amanhã é um novo dia.</p>
+        <button class="btn-ghost btn-sm" onclick="switchView('cheer')">Ver modo cheer up →</button>
+      </div>`);
+  }
 
   // Zona da semana
   const zi = weekNumber() % UNIQUE_ZONES.length;
@@ -458,6 +475,192 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/* ---------------- MODO ESCURO ---------------- */
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const dark = theme === 'dark';
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (icon) icon.textContent = dark ? '☀️' : '🌙';
+  if (label) label.textContent = dark ? 'Modo claro' : 'Modo escuro';
+  try { localStorage.setItem('casaclara_theme', theme); } catch {}
+}
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  toast(next === 'dark' ? 'Modo escuro 🌙' : 'Modo claro ☀️');
+}
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('casaclara_theme'); } catch {}
+  const pref = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  applyTheme(saved || pref);
+})();
+
+/* ---------------- NOTIFICAÇÕES ---------------- */
+function paintNotifUI() {
+  const granted = 'Notification' in window && Notification.permission === 'granted';
+  const supported = 'Notification' in window;
+  const btn = document.getElementById('notifBtn');
+  const times = document.getElementById('notifTimes');
+  const hint = document.getElementById('notifHint');
+  if (!supported) {
+    btn.textContent = 'Indisponível';
+    btn.disabled = true;
+    hint.textContent = 'Este browser não suporta notificações.';
+    return;
+  }
+  btn.textContent = granted ? 'Ativas ✓' : (Notification.permission === 'denied' ? 'Bloqueadas ⚠️' : 'Ativar');
+  if (Notification.permission === 'denied') {
+    hint.textContent = 'Bloqueadas nas definições do browser — permite em 🔒 Definições do site.';
+  }
+  times.classList.toggle('hidden', !granted);
+  if (granted) {
+    document.getElementById('notifMorning').value = state.notifMorning || '08:30';
+    document.getElementById('notifEvening').value = state.notifEvening || '21:00';
+  }
+}
+
+function askNotificationPermission() {
+  if (!('Notification' in window)) { toast('Browser sem suporte a notificações'); return; }
+  if (Notification.permission === 'granted') { scheduleDailyNotifications(); toast('Já estão ativas ✓'); paintNotifUI(); return; }
+  if (Notification.permission === 'denied') { toast('Bloqueadas nas definições do browser ⚠️'); return; }
+  Notification.requestPermission().then(p => {
+    paintNotifUI();
+    if (p === 'granted') { scheduleDailyNotifications(); toast('Lembretes ativados 🔔'); }
+    else toast('Sem problema — a app funciona igual');
+  });
+}
+
+function saveNotifTimes() {
+  state.notifMorning = document.getElementById('notifMorning').value;
+  state.notifEvening = document.getElementById('notifEvening').value;
+  saveState(); scheduleDailyNotifications();
+  toast('Horários guardados 🔔');
+}
+
+let notifTimeouts = [];
+function scheduleDailyNotifications() {
+  notifTimeouts.forEach(clearTimeout); notifTimeouts = [];
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date();
+  const reminders = [
+    { time: state.notifMorning || '08:30', title: '☀️ Rotina da manhã', body: '5 minutos de manhã mudam o dia. A CasaClara está contigo.' },
+    { time: state.notifEvening || '21:00', title: '🌙 Reset da noite', body: '10 minutos e amanhã acordas a uma casa mais leve.' },
+  ];
+  for (const r of reminders) {
+    const [h, m] = r.time.split(':').map(Number);
+    const at = new Date(now); at.setHours(h, m, 0, 0);
+    if (at <= now) continue; // hoje já passou — agenda-se amanhã ao reabrir
+    notifTimeouts.push(setTimeout(() => {
+      try { new Notification(r.title, { body: r.body, icon: '⌂' }); } catch {}
+    }, at - now));
+  }
+}
+
+function testNotification() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') { toast('Primeiro ativa as notificações'); return; }
+  new Notification('🔔 CasaClara', { body: 'Os lembretes estão a funcionar. Até já!' });
+  toast('Notificação de teste enviada 🔔');
+}
+
+/* ---------------- MODO CHEER UP ---------------- */
+const CARE_ITEMS = [
+  'Beber um copo de água',
+  'Abrir a janela 2 minutos',
+  'Lavar a cara / escovar os dentes',
+  'Mandar mensagem a alguém',
+  'Comer qualquer coisa simples',
+  'Deitar 10 minutos sem culpa',
+];
+
+function renderCheer() {
+  const key = todayKey();
+  state.careDone = state.careDone || {};
+  const done = new Set(state.careDone[key] || []);
+  document.getElementById('careList').innerHTML = CARE_ITEMS.map((c, i) => `
+    <div class="care-item ${done.has(i) ? 'done' : ''}" onclick="toggleCare(${i})">
+      <span class="care-check">${done.has(i) ? '✓' : ''}</span><span>${c}</span>
+    </div>`).join('');
+
+  const survival = state.survivalDays && state.survivalDays[key];
+  const btn = document.getElementById('survivalBtn');
+  btn.textContent = survival ? 'Ativo hoje ✓ — desativar' : 'Ativar para hoje';
+  btn.classList.toggle('btn-ghost', !!survival);
+
+  const num = state.supportNumber;
+  if (num) document.getElementById('callLink').href = 'tel:' + num;
+}
+
+function toggleCare(i) {
+  const key = todayKey();
+  state.careDone = state.careDone || {};
+  state.careDone[key] = state.careDone[key] || [];
+  const arr = state.careDone[key];
+  const idx = arr.indexOf(i);
+  if (idx >= 0) arr.splice(idx, 1);
+  else { arr.push(i); toast('Cuidar de ti conta ✨'); }
+  saveState(); renderCheer();
+}
+
+function toggleSurvival() {
+  const key = todayKey();
+  state.survivalDays = state.survivalDays || {};
+  if (state.survivalDays[key]) {
+    delete state.survivalDays[key];
+    toast('Modo normal restaurado 💪');
+  } else {
+    state.survivalDays[key] = true;
+    toast('Modo sobrevivência ativo 🌱 Só 1 coisa conta hoje.');
+  }
+  saveState(); renderCheer(); renderDashboard();
+}
+
+function setSupportNumber(e) {
+  if (state.supportNumber) return; // já configurado
+  e.preventDefault();
+  const num = prompt('Número de telefone de alguém de confiança (com indicativo, ex.: +351…):');
+  if (num && num.trim()) {
+    state.supportNumber = num.trim();
+    saveState();
+    document.getElementById('callLink').href = 'tel:' + state.supportNumber;
+    toast('Contacto guardado 💛');
+  }
+}
+
+/* Respiração 4-4-6 */
+const BREATHE_PHASES = [
+  { text: 'Inspira…', dur: 4000, cls: 'inhale' },
+  { text: 'Segura…', dur: 4000, cls: 'hold' },
+  { text: 'Expira…', dur: 6000, cls: 'exhale' },
+];
+let breathe = { running: false, timeout: null };
+
+function toggleBreathe() {
+  breathe.running ? stopBreathe() : startBreathe();
+}
+function startBreathe() {
+  breathe.running = true;
+  document.getElementById('breatheBtn').textContent = '⏸ Parar';
+  runPhase(0);
+}
+function runPhase(i) {
+  if (!breathe.running) return;
+  const phase = BREATHE_PHASES[i % BREATHE_PHASES.length];
+  const circle = document.getElementById('breatheCircle');
+  circle.className = 'breathe-circle ' + phase.cls;
+  document.getElementById('breatheText').textContent = phase.text;
+  breathe.timeout = setTimeout(() => runPhase(i + 1), phase.dur);
+}
+function stopBreathe() {
+  breathe.running = false;
+  clearTimeout(breathe.timeout);
+  const circle = document.getElementById('breatheCircle');
+  circle.className = 'breathe-circle';
+  document.getElementById('breatheText').textContent = 'Pronta/o?';
+  document.getElementById('breatheBtn').textContent = '▶ Começar';
+}
+
 /* ---------------- INIT ---------------- */
 (function init() {
   seedTasks();
@@ -469,5 +672,8 @@ function escapeHtml(s) {
   renderZones();
   renderTasks();
   renderDeclutter();
+  renderCheer();
+  paintNotifUI();
+  scheduleDailyNotifications();
   paintTimer();
 })();
