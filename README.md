@@ -1,5 +1,6 @@
 # CasaClara ⌂
 
+![Testes](https://github.com/bjorkian/casaclara/actions/workflows/test.yml/badge.svg)
 App web de organização da casa para pessoas com **PHDA (TDAH)** — desenhada com os princípios de uma Senior Organizer e de uma Senior Interior Designer: moderna, simplista, intuitiva e sem culpa.
 
 > Uma casa organizada, uma decisão de cada vez.

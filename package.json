@@ -1,0 +1,12 @@
+{
+  "name": "casaclara",
+  "version": "2.0.0",
+  "private": true,
+  "description": "CasaClara — organização da casa para mentes PHDA",
+  "scripts": {
+    "test": "python3 -m http.server 8123 & sleep 2; node tests/smoke.test.mjs; EXIT=$?; kill %1; exit $EXIT"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}
